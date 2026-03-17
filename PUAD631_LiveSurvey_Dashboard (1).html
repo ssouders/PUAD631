@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PUAD 631 — Live Survey Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Arial, sans-serif; background: #0d1117; color: #e6edf3; min-height: 100vh; }
+
+/* SETUP */
+#setup { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 2rem; }
+.setup-card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 2.5rem; max-width: 680px; width: 100%; }
+.setup-card h1 { font-size: 22px; font-weight: 700; color: #58a6ff; margin-bottom: 4px; }
+.setup-card .sub { font-size: 14px; color: #8b949e; margin-bottom: 2rem; }
+.field-label { font-size: 13px; font-weight: 600; color: #c9d1d9; display: block; margin-bottom: 6px; }
+.setup-card input {
+  width: 100%; padding: 10px 14px; background: #0d1117; border: 1px solid #30363d;
+  border-radius: 8px; color: #e6edf3; font-size: 14px; margin-bottom: 1.2rem; outline: none;
+}
+.setup-card input:focus { border-color: #58a6ff; }
+.steps-box { background: #0d1117; border-radius: 8px; padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; }
+.step { display: flex; gap: 12px; font-size: 13px; color: #8b949e; padding: 5px 0; line-height: 1.5; }
+.step .n { color: #58a6ff; font-weight: 700; min-width: 18px; }
+.btn { width: 100%; padding: 13px; background: #1f6feb; border: none; border-radius: 8px; color: #fff; font-size: 15px; font-weight: 700; cursor: pointer; }
+.btn:hover { background: #388bfd; }
+.err { font-size: 13px; color: #f85149; margin-top: 10px; display: none; }
+.q-list { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid #21262d; }
+.q-list h3 { font-size: 13px; font-weight: 700; color: #c9d1d9; margin-bottom: 1rem; }
+.q-item { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid #21262d; font-size: 13px; color: #8b949e; }
+.q-item:last-child { border-bottom: none; }
+.q-num { color: #58a6ff; font-weight: 700; min-width: 22px; }
+.q-type { background: #1f2937; color: #93c5fd; font-size: 11px; padding: 2px 7px; border-radius: 4px; height: fit-content; white-space: nowrap; margin-top: 1px; }
+
+/* DASHBOARD */
+#dashboard { display: none; }
+.topbar {
+  background: #161b22; border-bottom: 1px solid #30363d;
+  padding: 12px 2rem; display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 100;
+}
+.topbar-left { display: flex; flex-direction: column; }
+.topbar-left h1 { font-size: 17px; font-weight: 700; color: #e6edf3; }
+.topbar-left .section-label { font-size: 12px; color: #8b949e; margin-top: 1px; }
+.topbar-right { display: flex; align-items: center; gap: 1.5rem; }
+.resp-pill { background: #1f6feb22; border: 1px solid #1f6feb55; border-radius: 20px; padding: 4px 14px; font-size: 14px; font-weight: 700; color: #58a6ff; }
+.live { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #3fb950; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #3fb950; animation: blink 2s infinite; }
+@keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0.25;} }
+.upd { font-size: 11px; color: #6e7681; }
+
+.section-header {
+  padding: 1.2rem 2rem 0.4rem;
+  font-size: 11px; font-weight: 700; color: #58a6ff;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  display: flex; align-items: center; gap: 10px;
+}
+.section-header::after { content: ''; flex: 1; height: 1px; background: #21262d; }
+
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; padding: 0.75rem 2rem 1.5rem; }
+.card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 1.4rem; }
+.card.full { grid-column: 1 / -1; }
+.card .q { font-size: 15px; font-weight: 600; color: #e6edf3; margin-bottom: 1.1rem; line-height: 1.45; }
+
+/* Bar chart rows */
+.bar-row { margin-bottom: 12px; }
+.bar-meta { display: flex; justify-content: space-between; font-size: 12px; color: #8b949e; margin-bottom: 4px; }
+.bar-meta .pct { font-weight: 700; color: #c9d1d9; }
+.track { background: #0d1117; border-radius: 4px; height: 30px; overflow: hidden; position: relative; }
+.fill { height: 100%; border-radius: 4px; transition: width 0.7s cubic-bezier(.4,0,.2,1); display: flex; align-items: center; padding-left: 10px; min-width: 4px; }
+.fill span { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.85); white-space: nowrap; }
+
+/* Scale chart */
+.scale-wrap { position: relative; height: 180px; }
+
+/* Ranking */
+.rank-list { list-style: none; }
+.rank-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #21262d; }
+.rank-item:last-child { border-bottom: none; }
+.rank-pos { font-size: 24px; font-weight: 800; color: #58a6ff; min-width: 32px; }
+.rank-body { flex: 1; }
+.rank-label { font-size: 14px; color: #c9d1d9; margin-bottom: 4px; }
+.rank-bar-track { height: 4px; background: #21262d; border-radius: 2px; }
+.rank-bar-fill { height: 100%; border-radius: 2px; background: #58a6ff; transition: width 0.7s; }
+.rank-score { font-size: 12px; color: #6e7681; min-width: 60px; text-align: right; }
+
+/* No data */
+.empty { text-align: center; color: #6e7681; font-size: 14px; padding: 2.5rem 0; }
+
+@media(max-width:700px){ .grid{grid-template-columns:1fr;} .card.full{grid-column:1;} }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════ SETUP ══════════════════════ -->
+<div id="setup">
+  <div class="setup-card">
+    <h1>PUAD 631 — Live Survey Dashboard</h1>
+    <p class="sub">Itemized Deductions &amp; Phaseouts — TPC Briefing Book</p>
+
+    <div class="steps-box">
+      <div class="step"><span class="n">1</span><span>Create a Google Form using the questions listed below. Make sure column headers in the linked Sheet match exactly.</span></div>
+      <div class="step"><span class="n">2</span><span>In your linked Google Sheet: <strong style="color:#c9d1d9">File → Share → Publish to web → Sheet 1 → CSV → Publish</strong></span></div>
+      <div class="step"><span class="n">3</span><span>Paste the CSV URL below (it ends in <code style="color:#93c5fd">output=csv</code>) and click Launch.</span></div>
+      <div class="step"><span class="n">4</span><span>Share the Google Form link with students. This dashboard auto-refreshes every 8 seconds.</span></div>
+    </div>
+
+    <label class="field-label">Google Sheet CSV publish URL</label>
+    <input id="csv-url" type="text" placeholder="https://docs.google.com/spreadsheets/d/…/pub?gid=0&single=true&output=csv" />
+
+    <label class="field-label">Dashboard title (optional)</label>
+    <input id="dash-title-input" type="text" value="PUAD 631 — Itemized Deductions &amp; Phaseouts" />
+
+    <button class="btn" onclick="launch()">Launch Live Dashboard →</button>
+    <p class="err" id="err">Could not load data. Double-check the URL and make sure "Publish to web" is enabled on the Sheet.</p>
+
+    <div class="q-list">
+      <h3>Copy these questions exactly into your Google Form:</h3>
+      <div id="q-list-items"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════ DASHBOARD ══════════════════════ -->
+<div id="dashboard">
+  <div class="topbar">
+    <div class="topbar-left">
+      <h1 id="dash-title-display">PUAD 631 — Live Survey</h1>
+      <span class="section-label">Tax Policy Center Briefing Book — Live Results</span>
+    </div>
+    <div class="topbar-right">
+      <span class="resp-pill" id="resp-count">0 responses</span>
+      <span class="live"><span class="dot"></span>Live</span>
+      <span class="upd">Updated <span id="last-upd">—</span></span>
+    </div>
+  </div>
+  <div id="dash-body"></div>
+</div>
+
+<script>
+const COLORS = {
+  blue:   ['#1f6feb','#388bfd','#58a6ff','#79c0ff','#a5d6ff'],
+  teal:   ['#0d7377','#14a085','#1abc9c','#48c9b0','#76d7c4'],
+  amber:  ['#9e5700','#bf6f00','#e09400','#f0b429','#ffd26a'],
+  red:    ['#8b0000','#b91c1c','#dc2626','#ef4444','#f87171'],
+};
+
+const QUESTIONS = [
+  // ── SECTION: ITEMIZED DEDUCTIONS ──────────────────────────────────────────
+  {
+    section: "Part 1 — Itemized Deductions",
+    id: "q1",
+    col: "Before reading, did you know what an itemized deduction was?",
+    label: "Before reading: did you know what an itemized deduction was?",
+    type: "mc",
+    options: ["Yes — I knew exactly what it was", "I'd heard of it but wasn't sure", "No — this is new to me"],
+    colors: COLORS.blue,
+  },
+  {
+    section: null,
+    id: "q2",
+    col: "What percentage of taxpayers do you think itemize? (your guess before reading)",
+    label: "Your guess before reading: what % of taxpayers itemize?",
+    type: "mc",
+    options: ["Less than 10%", "10–20%", "20–35%", "More than 35%"],
+    colors: COLORS.teal,
+    reveal: "Actual answer: about 10% (down from 31% before TCJA 2017)"
+  },
+  {
+    section: null,
+    id: "q3",
+    col: "After reading, how surprised were you that only ~10% of taxpayers now itemize?",
+    label: "How surprised were you that only ~10% now itemize?",
+    type: "scale",
+    options: ["1 – Not at all", "2", "3", "4", "5 – Very surprised"],
+    colors: COLORS.blue,
+  },
+  {
+    section: null,
+    id: "q4",
+    col: "The mortgage interest deduction disproportionately benefits higher-income taxpayers. Should it be reformed?",
+    label: "The mortgage interest deduction benefits high earners most. Should it be reformed?",
+    type: "mc",
+    options: ["Yes — convert to a credit or eliminate it", "Yes — but keep some version of it", "No — leave it as is", "Unsure"],
+    colors: COLORS.teal,
+  },
+  {
+    section: null,
+    id: "q5",
+    col: "Which itemized deduction is most justified as a matter of tax policy?",
+    label: "Which itemized deduction is most justified?",
+    type: "mc",
+    options: ["Medical expenses", "Charitable giving", "State & local taxes (SALT)", "Mortgage interest"],
+    colors: COLORS.blue,
+  },
+
+  // ── SECTION: PHASEOUTS ───────────────────────────────────────────────────
+  {
+    section: "Part 2 — Phaseouts",
+    id: "q6",
+    col: "Before reading, did you know that phaseouts create an implicit marginal tax rate on top of the statutory rate?",
+    label: "Before reading: did you know phaseouts create an implicit marginal tax rate on top of the statutory rate?",
+    type: "mc",
+    options: ["Yes — I understood this", "No — this is new to me", "I suspected it but didn't know the mechanism"],
+    colors: COLORS.amber,
+  },
+  {
+    section: null,
+    id: "q7",
+    col: "How surprising was it to learn that phaseouts can push effective marginal rates above 50% for low-income workers? (1 = not surprising, 5 = very surprising)",
+    label: "How surprising: phaseouts can push marginal rates above 50% for low-income workers",
+    type: "scale",
+    options: ["1 – Not surprising", "2", "3", "4", "5 – Very surprising"],
+    colors: COLORS.amber,
+  },
+  {
+    section: null,
+    id: "q8",
+    col: "A single parent earning an extra $1,000 in the EITC phaseout zone might keep less than $500 after taxes and benefit reductions. Who is most responsible?",
+    label: "Who is most responsible for the high implicit tax burden on workers in the EITC phaseout zone?",
+    type: "mc",
+    options: ["Congress — they designed this phaseout structure", "Both Congress and the worker equally", "Neither — this is a fair tradeoff for targeting benefits", "Unsure"],
+    colors: COLORS.amber,
+  },
+  {
+    section: null,
+    id: "q9",
+    col: "Which phaseout design is more equitable — a hard cliff (benefit cuts off entirely at a threshold) or a gradual phaseout (benefit reduces slowly)?",
+    label: "Which is more equitable — a hard cliff or a gradual phaseout?",
+    type: "mc",
+    options: ["Hard cliff — simpler and more transparent", "Gradual phaseout — softer but creates high implicit marginal rates", "Neither is equitable — benefits shouldn't phase out at all", "Unsure"],
+    colors: COLORS.red,
+  },
+  {
+    section: null,
+    id: "q10",
+    col: "Which is the more urgent policy problem — itemized deductions concentrating benefits at the top, or phaseouts concentrating burdens at the bottom?",
+    label: "Which is the more urgent policy problem?",
+    type: "mc",
+    options: ["Itemized deductions — the rich getting extra breaks is the bigger issue", "Phaseouts — punishing low earners for working more is the bigger issue", "They are equally serious", "Neither — I don't see either as a significant problem"],
+    colors: COLORS.red,
+  },
+];
+
+// ── Render question list in setup ──────────────────────────────────────────
+const ql = document.getElementById('q-list-items');
+QUESTIONS.forEach((q, i) => {
+  const typeLabel = { mc: 'Multiple choice', scale: '1–5 scale', rank: 'Ranking (drag order)' }[q.type];
+  ql.innerHTML += `
+    <div class="q-item">
+      <span class="q-num">${i+1}</span>
+      <div style="flex:1">
+        <div style="color:#c9d1d9;margin-bottom:3px">${q.col}</div>
+        ${q.options ? `<div style="font-size:11px;color:#6e7681">Options: ${q.options.join(' / ')}</div>` : ''}
+      </div>
+      <span class="q-type">${typeLabel}</span>
+    </div>`;
+});
+
+// ── Launch ─────────────────────────────────────────────────────────────────
+let CSV_URL = '';
+let POLL_ID = null;
+
+function launch() {
+  const url = document.getElementById('csv-url').value.trim();
+  if (!url) { showErr('Please enter the CSV publish URL from your Google Sheet.'); return; }
+  CSV_URL = url;
+  const title = document.getElementById('dash-title-input').value.trim() || 'PUAD 631 — Live Survey';
+  document.getElementById('dash-title-display').textContent = title;
+  document.getElementById('err').style.display = 'none';
+  fetchAndRender();
+}
+
+function showErr(msg) {
+  const el = document.getElementById('err');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+// ── Fetch + Parse CSV ──────────────────────────────────────────────────────
+async function fetchAndRender() {
+  try {
+    const res = await fetch(CSV_URL + '&t=' + Date.now());
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    const rows = parseCSV(text);
+    if (rows.length < 2) throw new Error('No data rows');
+
+    document.getElementById('setup').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+
+    renderDashboard(rows);
+    document.getElementById('resp-count').textContent = (rows.length - 1) + ' response' + (rows.length - 1 !== 1 ? 's' : '');
+    document.getElementById('last-upd').textContent = new Date().toLocaleTimeString();
+
+    if (!POLL_ID) POLL_ID = setInterval(fetchAndRender, 8000);
+  } catch(e) {
+    showErr('Could not load data. Check your URL. Error: ' + e.message);
+  }
+}
+
+function parseCSV(text) {
+  return text.trim().split('\n').map(line => {
+    const cells = []; let cur = ''; let inQ = false;
+    for (const c of line) {
+      if (c === '"') { inQ = !inQ; }
+      else if (c === ',' && !inQ) { cells.push(cur.trim()); cur = ''; }
+      else cur += c;
+    }
+    cells.push(cur.trim());
+    return cells;
+  });
+}
+
+// ── Render Dashboard ──────────────────────────────────────────────────────
+function renderDashboard(rows) {
+  const headers = rows[0];
+  const data = rows.slice(1);
+
+  const body = document.getElementById('dash-body');
+  body.innerHTML = '';
+
+  let currentSection = null;
+  let currentGrid = null;
+
+  QUESTIONS.forEach(q => {
+    // Find matching column
+    const colIdx = headers.findIndex(h => h.toLowerCase().includes(q.col.toLowerCase().slice(0, 30)));
+    const responses = colIdx >= 0 ? data.map(r => (r[colIdx] || '').trim()).filter(Boolean) : [];
+
+    // Section header
+    if (q.section && q.section !== currentSection) {
+      currentSection = q.section;
+      const sh = document.createElement('div');
+      sh.className = 'section-header';
+      sh.textContent = q.section;
+      body.appendChild(sh);
+      currentGrid = document.createElement('div');
+      currentGrid.className = 'grid';
+      body.appendChild(currentGrid);
+    }
+    if (!currentGrid) {
+      currentGrid = document.createElement('div');
+      currentGrid.className = 'grid';
+      body.appendChild(currentGrid);
+    }
+
+    const card = document.createElement('div');
+    card.className = 'card' + (q.type === 'rank' ? ' full' : '');
+
+    if (q.type === 'mc' || q.type === 'yesno') {
+      card.innerHTML = buildMCCard(q, responses);
+    } else if (q.type === 'scale') {
+      card.innerHTML = buildScaleCard(q, responses);
+    } else if (q.type === 'rank') {
+      card.innerHTML = buildRankCard(q, responses);
+    }
+
+    currentGrid.appendChild(card);
+  });
+}
+
+// ── MC Card ────────────────────────────────────────────────────────────────
+function buildMCCard(q, responses) {
+  const counts = {};
+  q.options.forEach(o => counts[o] = 0);
+  responses.forEach(r => {
+    const match = q.options.find(o => r.toLowerCase().includes(o.toLowerCase().slice(0,20)));
+    if (match) counts[match]++;
+  });
+  const total = responses.length || 1;
+  let bars = '';
+  q.options.forEach((opt, i) => {
+    const pct = Math.round((counts[opt] / total) * 100);
+    const color = q.colors[i % q.colors.length];
+    bars += `
+      <div class="bar-row">
+        <div class="bar-meta"><span>${opt}</span><span class="pct">${pct}%&nbsp;(${counts[opt]})</span></div>
+        <div class="track"><div class="fill" style="width:${pct}%;background:${color}">
+          ${pct > 12 ? `<span>${pct}%</span>` : ''}
+        </div></div>
+      </div>`;
+  });
+  const reveal = q.reveal ? `<div style="margin-top:12px;font-size:12px;color:#3fb950;background:#0d2e1a;border-radius:6px;padding:8px 12px;">✓ ${q.reveal}</div>` : '';
+  const empty = responses.length === 0 ? '<div class="empty">No responses yet</div>' : '';
+  return `<div class="q">${q.label}</div>${empty || bars}${reveal}`;
+}
+
+// ── Scale Card ─────────────────────────────────────────────────────────────
+function buildScaleCard(q, responses) {
+  const counts = [0,0,0,0,0];
+  let sum = 0;
+  responses.forEach(r => {
+    const n = parseInt(r.charAt(0));
+    if (n >= 1 && n <= 5) { counts[n-1]++; sum += n; }
+  });
+  const total = responses.length || 1;
+  const avg = responses.length ? (sum / responses.length).toFixed(1) : '—';
+
+  let bars = '';
+  q.options.forEach((opt, i) => {
+    const pct = Math.round((counts[i] / total) * 100);
+    const color = q.colors[Math.min(i, q.colors.length-1)];
+    bars += `
+      <div class="bar-row">
+        <div class="bar-meta"><span>${opt}</span><span class="pct">${pct}%&nbsp;(${counts[i]})</span></div>
+        <div class="track"><div class="fill" style="width:${pct}%;background:${color}">
+          ${pct > 12 ? `<span>${pct}%</span>` : ''}
+        </div></div>
+      </div>`;
+  });
+
+  const empty = responses.length === 0 ? '<div class="empty">No responses yet</div>' : '';
+  const avgBadge = responses.length ? `<div style="float:right;background:#1f2937;border-radius:8px;padding:4px 12px;font-size:13px;color:#93c5fd;font-weight:700;margin-bottom:10px">avg: ${avg}</div><div style="clear:both"></div>` : '';
+  return `<div class="q">${q.label}</div>${avgBadge}${empty || bars}`;
+}
+
+// ── Rank Card ──────────────────────────────────────────────────────────────
+function buildRankCard(q, responses) {
+  // Scoring: rank 1 = N pts, rank N = 1 pt (lower rank number = more preferred)
+  const n = q.options.length;
+  const scores = {};
+  q.options.forEach(o => scores[o] = 0);
+  let counted = 0;
+
+  responses.forEach(r => {
+    // Google Forms ranking response: "Option A > Option B > Option C > Option D"
+    // Or comma-separated in order
+    const parts = r.split(/[>,\n]/).map(s => s.trim()).filter(Boolean);
+    if (parts.length === 0) return;
+    counted++;
+    parts.forEach((part, i) => {
+      const match = q.options.find(o => part.toLowerCase().includes(o.toLowerCase().slice(0,15)));
+      if (match) scores[match] += (n - i);
+    });
+  });
+
+  const maxScore = counted * n || 1;
+  const sorted = [...q.options].sort((a, b) => scores[b] - scores[a]);
+
+  let items = '';
+  sorted.forEach((opt, i) => {
+    const pct = Math.round((scores[opt] / maxScore) * 100);
+    items += `
+      <li class="rank-item">
+        <span class="rank-pos">${i+1}</span>
+        <div class="rank-body">
+          <div class="rank-label">${opt}</div>
+          <div class="rank-bar-track"><div class="rank-bar-fill" style="width:${pct}%"></div></div>
+        </div>
+        <span class="rank-score">${scores[opt]} pts</span>
+      </li>`;
+  });
+
+  const empty = responses.length === 0 ? '<div class="empty">No responses yet</div>' : '';
+  const note = `<div style="font-size:11px;color:#6e7681;margin-bottom:12px">Ranked by aggregate preference score across ${counted} response${counted !== 1 ? 's' : ''}</div>`;
+  return `<div class="q">${q.label}</div>${responses.length ? note : ''}${empty || `<ul class="rank-list">${items}</ul>`}`;
+}
+</script>
+</body>
+</html>
